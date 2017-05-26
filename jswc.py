@@ -7,43 +7,30 @@ from bs4 import BeautifulSoup, SoupStrainer
 from urlparse import urlparse
 
 
-def parse_href(link, base_url):
-    if link['href'] != "#" and link['href'] != "/" and "javascript" not in \
-            link['href'] and "mailto:" not in link['href']:
-        link_found = None
-        if (link['href'].startswith(base_url.scheme)):
-            link_found = urlparse(link['href'])
+def parse_href(a_tag, url):
+    link_found = None
+    href = a_tag.attrs['href']
+    if href != "#" and "javascript" not in href and "mailto:" not in href:
+        if (href.startswith(url.scheme)):
+            link_found = urlparse(href)
+        elif href.startswith("/"):
+            link_found = urlparse(url.scheme + "://" + url.netloc + href)
         else:
-            if link['href'].startswith("/"):
-                link_found = urlparse(base_url.scheme + "://" + base_url.netloc + link['href'])
-            else:
-                if link['href'].startswith("http"):
-                    link_found = urlparse(link['href'])
-                else:
-                    path = base_url.geturl().split("/")
-                    link_found = urlparse(base_url.geturl().replace(path[len(path) - 1], "") + link['href'])
-        if link_found:
-            return link_found
-    return None
+            link_found = urlparse(url.scheme + "://" + url.netloc + "/" + href)
+    return link_found
 
 
-def get_links(base, url):
+def get_links(base_url, url):
     links = []
-    if base.netloc == url.netloc:
-        try:
-            http = httplib2.Http(disable_ssl_certificate_validation=True)
-            status, response = http.request(url.geturl())
-            if status.status == 200 and "image" not in status['content-type']:
-                for link in BeautifulSoup(response, "html.parser", parse_only=SoupStrainer('a')):
-                    if link.has_attr('href'):
-                        try:
-                            link = parse_href(link, base)
-                        except:
-                            pass
-                        if link:
-                            links.append(link)
-        except:
-            pass
+    if base_url.netloc == url.netloc:
+        http = httplib2.Http(disable_ssl_certificate_validation=True)
+        status, response = http.request(url.geturl())
+        if status.status == 200 and "image" not in status['content-type']:
+            for a_tag in BeautifulSoup(response, "html.parser", parse_only=SoupStrainer('a')):
+                if a_tag.has_attr('href'):
+                    link = parse_href(a_tag, url)
+                    if link:
+                        links.append(link)
     return links
 
 
@@ -52,7 +39,7 @@ def worker(base, url, crawled):
         if link not in crawled:
             crawled.append(link)
             threading.Thread(target=worker, args=(base, urlparse(link.geturl()), crawled,)).start()
-            sys.stdout.write(link.geturl() + "\n")
+            sys.stdout.write("[+] " + link.geturl() + "\n")
             sys.stdout.flush()
     return
 
@@ -64,8 +51,18 @@ if __name__ == '__main__':
     args = parser.parse_args()
     if args.url:
         base_url = urlparse(args.url)
-        base = []
-        for link in get_links(base_url, base_url):
-            base.append(link)
-        for url in base:
-            threading.Thread(target=worker, args=(base_url, url, crawled,)).start()
+        try:
+            http = httplib2.Http(disable_ssl_certificate_validation=True)
+            status, response = http.request(base_url.geturl())
+            sys.stdout.write("\n======================================================")
+            sys.stdout.write("\nSERVER: " + status['server'])
+            sys.stdout.write("\nX-POWERED-BY: " + status['x-powered-by'])
+            sys.stdout.write("\n======================================================\n")
+            base = []
+            for link in get_links(base_url, base_url):
+                base.append(link)
+            for url in base:
+                threading.Thread(target=worker, args=(base_url, url, crawled,)).start()
+        except httplib2.ServerNotFoundError as e:
+            sys.stdout.write(e.message + "\n")
+            sys.stdout.flush()
