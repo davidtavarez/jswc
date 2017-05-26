@@ -1,58 +1,63 @@
 #!/usr/bin/env python
-import argparse, httplib2, sys
+import argparse, httplib2
+import threading
 
 from bs4 import BeautifulSoup, SoupStrainer
 from urlparse import urlparse
 
+
+def parse_href(link, base_url):
+    if link['href'] != "#" and link['href'] != "/" and "javascript" not in \
+            link['href'] and "mailto:" not in link['href'] :
+        link_found = None
+        if (link['href'].startswith(base_url.scheme)):
+            link_found = urlparse(link['href'])
+        else:
+            if link['href'].startswith("/"):
+                link_found = urlparse(base_url.scheme + "://" + base_url.netloc + link['href'])
+            else:
+                if link['href'].startswith("http"):
+                    link_found = urlparse(link['href'])
+                else:
+                    path = base_url.geturl().split("/")
+                    link_found = urlparse(base_url.geturl().replace(path[len(path) - 1], "") + link['href'])
+        if link_found:
+            if link_found.netloc == base_url.netloc:
+                return link_found
+    return None
+
+
+def get_links(base, url):
+    links = []
+    http = httplib2.Http(disable_ssl_certificate_validation=True)
+    status, response = http.request(url.geturl())
+    if status.status == 200:
+        for link in BeautifulSoup(response, "html.parser", parse_only=SoupStrainer('a')):
+            if link.has_attr('href'):
+                link = parse_href(link, base)
+                if link:
+                    links.append(link)
+    return links
+
+
+def worker(base, url, crawled):
+    for link in get_links(base, url):
+        if link not in crawled:
+            crawled.append(link)
+            threading.Thread(target=worker, args=(base, urlparse(link.geturl()), crawled,)).start()
+            print link.geturl()
+    return
+
+
 if __name__ == '__main__':
     crawled = []
-    emails = []
-    to_crawl = []
     parser = argparse.ArgumentParser()
     parser.add_argument("--url", help="The URL to scan.")
-    parser.add_argument("--file", help="The output file to save results.")
     args = parser.parse_args()
     if args.url:
-        url = urlparse(args.url)
-        to_crawl.append(url.geturl())
-        while len(to_crawl) > 0:
-            sys.stdout.write("\r" + str(len(to_crawl)))
-            sys.stdout.flush()
-            try:
-                crawling = to_crawl.pop()
-                if crawling not in crawled:
-                    http = httplib2.Http(disable_ssl_certificate_validation=True)
-                    status, response = http.request(crawling)
-                    for link in BeautifulSoup(response, "html.parser", parse_only=SoupStrainer('a')):
-                        if link.has_attr('href'):
-                            if "mailto:" in link['href']:
-                                emails.append(link['href'].replace("mailto:", ""))
-                            elif link['href'] != "#" and link['href'] != "/" and "javascript" not in link['href']:
-                                arg = None
-                                if (link['href'].startswith(url.scheme)):
-                                    arg = urlparse(link['href'])
-                                else:
-                                    if link['href'].startswith("/"):
-                                        arg = urlparse(url.scheme + "://" + url.netloc + link['href'])
-                                    else:
-                                        if link['href'].startswith("http"):
-                                            arg = urlparse(link['href'])
-                                        else:
-                                            path = url.geturl().split("/")
-                                            arg = urlparse(url.geturl().replace(path[len(path) - 1], "") + link['href'])
-                                if arg.netloc == url.netloc:
-                                    url_found = arg.geturl()
-                                    if url_found not in crawled:
-                                        if url_found not in to_crawl:
-                                            to_crawl.append(url_found)
-                    crawled.append(crawling)
-            except:
-                pass
-        if args.file:
-            file = open(args.file, 'w')
-            for link in crawled:
-                file.write("%s\n" % link)
-            file.close()
-        else:
-            for link in crawled:
-                print link
+        base_url = urlparse(args.url)
+        base = []
+        for link in get_links(base_url, base_url):
+            base.append(link)
+        for url in base:
+            threading.Thread(target=worker, args=(base_url, url, crawled,)).start()
