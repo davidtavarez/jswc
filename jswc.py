@@ -1,11 +1,24 @@
 #!/usr/bin/env python
-import argparse, httplib2
+import argparse,httplib2
 import threading
+import socket
+
+import socks
 
 import sys
 from bs4 import BeautifulSoup, SoupStrainer
 from urlparse import urlparse
 
+
+def create_tor_connection(address, timeout=None, source_address=None):
+    sock = socks.socksocket()
+    try:
+        sock.connect(address)
+    except Exception as e:
+        sys.stdout.write(e.message)
+        sys.stdout.flush()
+        sys.exit()
+    return sock
 
 def parse_href(a_tag, url):
     link_found = None
@@ -48,7 +61,15 @@ if __name__ == '__main__':
     crawled = []
     parser = argparse.ArgumentParser()
     parser.add_argument("--url", help="The URL to scan.")
+    parser.add_argument("--tor-host", help="Tor server.")
+    parser.add_argument("--tor-port", help="Tor port server.")
     args = parser.parse_args()
+    if args.tor_host:
+        socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS5, args.tor_host, int(args.tor_port), True)
+        # patch the socket module
+        socket.socket = socks.socksocket
+        socket.create_connection = create_tor_connection
+
     if args.url:
         base_url = urlparse(args.url)
         try:
