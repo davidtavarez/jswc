@@ -2,6 +2,7 @@
 import argparse, httplib2
 import threading
 import socket
+from urllib2 import urlopen
 
 import socks
 
@@ -60,26 +61,37 @@ def worker(base, url, crawled):
 
 if __name__ == '__main__':
     crawled = []
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("--url", help="The URL to scan.")
+    parser.add_argument("-t", "--target", help="The URL of the TARGET to scan.", required=True)
     parser.add_argument("--tor-host", help="Tor server.")
     parser.add_argument("--tor-port", help="Tor port server.")
+
     args = parser.parse_args()
+
     if args.tor_host:
         socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS5, args.tor_host, int(args.tor_port), True)
         # patch the socket module
         socket.socket = socks.socksocket
         socket.create_connection = create_tor_connection
 
-    if args.url:
-        base_url = urlparse(args.url)
+        ip = urlopen('http://ip.42.pl/raw').read()
+
+        sys.stdout.write("\n======================================================")
+        sys.stdout.write("\nTOR PROXY\t:\t" + args.tor_host)
+        sys.stdout.write("\nTOR PORT\t:\t" + args.tor_port)
+        sys.stdout.write("\nPUBLIC IP\t:\t" + ip)
+        sys.stdout.write("\n======================================================\n")
+
+    if args.target:
+        base_url = urlparse(args.target)
         try:
             http = httplib2.Http(disable_ssl_certificate_validation=True)
             status, response = http.request(base_url.geturl())
             sys.stdout.write("\n======================================================")
-            sys.stdout.write("\nSERVER: " + status['server'])
-            sys.stdout.write("\nX-POWERED-BY: " + status['x-powered-by'])
-            sys.stdout.write("\n======================================================\n")
+            sys.stdout.write("\nTARGET\t\t:\t" + status['server'])
+            sys.stdout.write("\nX-POWERED-BY\t:\t" + status['x-powered-by'])
+            sys.stdout.write("\n======================================================\n\n")
             base = []
             for link in get_links(base_url, base_url):
                 base.append(link)
@@ -89,4 +101,4 @@ if __name__ == '__main__':
             sys.stdout.write(e.message + "\n")
             sys.stdout.flush()
     else:
-       parser.print_help()
+        parser.print_help()
