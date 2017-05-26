@@ -2,6 +2,7 @@
 import argparse, httplib2
 import threading
 
+import sys
 from bs4 import BeautifulSoup, SoupStrainer
 from urlparse import urlparse
 
@@ -51,7 +52,8 @@ def worker(base, url, crawled):
         if link not in crawled:
             crawled.append(link)
             threading.Thread(target=worker, args=(base, urlparse(link.geturl()), crawled,)).start()
-            print link.geturl()
+            sys.stdout.write(link.geturl() + "\n")
+            sys.stdout.flush()
     return
 
 
