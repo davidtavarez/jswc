@@ -88,3 +88,5 @@ if __name__ == '__main__':
         except httplib2.ServerNotFoundError as e:
             sys.stdout.write(e.message + "\n")
             sys.stdout.flush()
+    else:
+       parser.print_help()
