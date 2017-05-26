@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import argparse,httplib2
+import argparse, httplib2
 import threading
 import socket
 
@@ -19,6 +19,7 @@ def create_tor_connection(address, timeout=None, source_address=None):
         sys.stdout.flush()
         sys.exit()
     return sock
+
 
 def parse_href(a_tag, url):
     link_found = None
