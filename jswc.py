@@ -8,7 +8,7 @@ from urlparse import urlparse
 
 def parse_href(link, base_url):
     if link['href'] != "#" and link['href'] != "/" and "javascript" not in \
-            link['href'] and "mailto:" not in link['href'] :
+            link['href'] and "mailto:" not in link['href']:
         link_found = None
         if (link['href'].startswith(base_url.scheme)):
             link_found = urlparse(link['href'])
@@ -22,21 +22,27 @@ def parse_href(link, base_url):
                     path = base_url.geturl().split("/")
                     link_found = urlparse(base_url.geturl().replace(path[len(path) - 1], "") + link['href'])
         if link_found:
-            if link_found.netloc == base_url.netloc:
-                return link_found
+            return link_found
     return None
 
 
 def get_links(base, url):
     links = []
-    http = httplib2.Http(disable_ssl_certificate_validation=True)
-    status, response = http.request(url.geturl())
-    if status.status == 200:
-        for link in BeautifulSoup(response, "html.parser", parse_only=SoupStrainer('a')):
-            if link.has_attr('href'):
-                link = parse_href(link, base)
-                if link:
-                    links.append(link)
+    if base.netloc == url.netloc:
+        try:
+            http = httplib2.Http(disable_ssl_certificate_validation=True)
+            status, response = http.request(url.geturl())
+            if status.status == 200 and "image" not in status['content-type']:
+                for link in BeautifulSoup(response, "html.parser", parse_only=SoupStrainer('a')):
+                    if link.has_attr('href'):
+                        try:
+                            link = parse_href(link, base)
+                        except:
+                            pass
+                        if link:
+                            links.append(link)
+        except:
+            pass
     return links
 
 
